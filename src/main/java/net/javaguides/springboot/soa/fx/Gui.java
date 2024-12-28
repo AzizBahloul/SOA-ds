@@ -30,6 +30,10 @@ public class Gui extends Application {
     private TextField usernameField, passwordField;
     private static final Logger logger = Logger.getLogger(Gui.class.getName());
 
+    private Product editingProduct = null; // State variable
+    private Button saveBtn;
+    private Button cancelEditBtn;
+
     @Override
     public void start(Stage primaryStage) {
         primaryStage.setTitle("E-Commerce Application");
@@ -254,10 +258,16 @@ public class Gui extends Application {
         categoryField = createStyledTextField("Category");
         descriptionField = createStyledTextField("Description");
         
-        Button saveBtn = new Button("Save Product");
+        saveBtn = new Button("Save Product");
         saveBtn.setStyle("-fx-background-color: #4CAF50; -fx-text-fill: white; -fx-font-weight: bold;");
         saveBtn.setMaxWidth(Double.MAX_VALUE);
         saveBtn.setOnAction(e -> saveProduct());
+
+        cancelEditBtn = new Button("Cancel Edit");
+        cancelEditBtn.setStyle("-fx-background-color: #f44336; -fx-text-fill: white; -fx-font-weight: bold;");
+        cancelEditBtn.setMaxWidth(Double.MAX_VALUE);
+        cancelEditBtn.setOnAction(e -> cancelEdit());
+        cancelEditBtn.setVisible(false); // Initially hidden
 
         form.getChildren().addAll(
                 titleLabel,
@@ -266,7 +276,8 @@ public class Gui extends Application {
                 createFormGroup("Stock", stockField),
                 createFormGroup("Category", categoryField),
                 createFormGroup("Description", descriptionField),
-                saveBtn
+                saveBtn,
+                cancelEditBtn // Added Cancel button
         );
 
         return form;
@@ -316,10 +327,103 @@ public class Gui extends Application {
                 deleteProduct(selected);
             }
         });
-        contextMenu.getItems().add(deleteItem);
+        
+        // Added Edit MenuItem
+        MenuItem editItem = new MenuItem("Edit");
+        editItem.setOnAction(e -> {
+            Product selected = table.getSelectionModel().getSelectedItem();
+            if (selected != null) {
+                populateForm(selected);
+            }
+        });
+        
+        contextMenu.getItems().addAll(deleteItem, editItem); // Modified line
         table.setContextMenu(contextMenu);
         
         return table;
+    }
+
+    // Method to populate form for editing
+    private void populateForm(Product product) {
+        this.editingProduct = product;
+        nameField.setText(product.getName());
+        priceField.setText(product.getPrice().toString());
+        stockField.setText(product.getStock().toString());
+        categoryField.setText(product.getCategory());
+        descriptionField.setText(product.getDescription());
+        
+        // Update UI to reflect editing state
+        saveBtn.setText("Update Product");
+        cancelEditBtn.setVisible(true);
+    }
+
+    private void saveProduct() {
+        try {
+            String name = nameField.getText();
+            Double price = Double.parseDouble(priceField.getText());
+            Integer stock = Integer.parseInt(stockField.getText());
+            String category = categoryField.getText();
+            String description = descriptionField.getText();
+
+            HttpHeaders headers = authService.createHeaders();
+            Product product = new Product();
+            product.setName(name);
+            product.setPrice(price);
+            product.setStock(stock);
+            product.setCategory(category);
+            product.setDescription(description);
+            HttpEntity<Product> request = new HttpEntity<>(product, headers);
+
+            if (editingProduct == null) {
+                // Create new product
+                restTemplate.exchange(
+                    baseUrl,
+                    HttpMethod.POST,
+                    request,
+                    Product.class
+                );
+            } else {
+                // Update existing product
+                restTemplate.exchange(
+                    baseUrl + "/" + editingProduct.getId(),
+                    HttpMethod.PUT,
+                    request,
+                    Product.class
+                );
+                editingProduct = null;
+            }
+
+            refreshTable();
+            clearForm();
+        } catch (Exception e) {
+            showAlert("Failed to save product: " + e.getMessage());
+        }
+    }
+
+    // Method to cancel editing
+    private void cancelEdit() {
+        this.editingProduct = null;
+        clearForm();
+    }
+
+    private void clearForm() {
+        nameField.clear();
+        priceField.clear();
+        stockField.clear();
+        categoryField.clear();
+        descriptionField.clear();
+        
+        // Reset UI to default state
+        saveBtn.setText("Save Product");
+        cancelEditBtn.setVisible(false);
+    }
+
+    private void showAlert(String message) {
+        Alert alert = new Alert(Alert.AlertType.ERROR);
+        alert.setTitle("Error");
+        alert.setHeaderText(null);
+        alert.setContentText(message);
+        alert.showAndWait();
     }
 
     private void deleteProduct(Product product) {
@@ -357,48 +461,6 @@ public class Gui extends Application {
         } catch (Exception e) {
             showAlert("Failed to refresh table: " + e.getMessage());
         }
-    }
-
-    private void saveProduct() {
-        try {
-            Product product = new Product();
-            product.setName(nameField.getText());
-            product.setPrice(Double.parseDouble(priceField.getText()));
-            product.setStock(Integer.parseInt(stockField.getText()));
-            product.setCategory(categoryField.getText());
-            product.setDescription(descriptionField.getText());
-
-            HttpHeaders headers = authService.createHeaders();
-            HttpEntity<Product> request = new HttpEntity<>(product, headers);
-            
-            restTemplate.exchange(
-                baseUrl,
-                HttpMethod.POST,
-                request,
-                Product.class
-            );
-            
-            refreshTable();
-            clearForm();
-        } catch (Exception e) {
-            showAlert("Failed to save product: " + e.getMessage());
-        }
-    }
-
-    private void clearForm() {
-        nameField.clear();
-        priceField.clear();
-        stockField.clear();
-        categoryField.clear();
-        descriptionField.clear();
-    }
-
-    private void showAlert(String message) {
-        Alert alert = new Alert(Alert.AlertType.ERROR);
-        alert.setTitle("Error");
-        alert.setHeaderText(null);
-        alert.setContentText(message);
-        alert.showAndWait();
     }
 
     public static void main(String[] args) {
